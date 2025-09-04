@@ -1,36 +1,28 @@
-# Dockerfile for Render deployment
 FROM node:20-slim
 
-# Install system dependencies for Playwright
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    procps \
-    libxss1 \
-    && rm -rf /var/lib/apt/lists/*
+# OS deps (Playwright needs these)
+RUN apt-get update && apt-get install -y wget gnupg ca-certificates procps libxss1 \
+  && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+# 1) Install ALL deps (prod + dev) so build tools exist
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm ci --only=production
+# 2) Copy the rest of your code
+COPY . .
 
-# Install Playwright browsers
+# 3) Install Playwright browser + OS deps inside the image
 RUN npx playwright install chromium
 RUN npx playwright install-deps chromium
 
-# Copy application code
-COPY . .
-
-# Build TypeScript
+# 4) Build (uses vite & esbuild from devDependencies)
 RUN npm run build
 
-# Expose port
-EXPOSE 5000
+# 5) Remove dev deps to slim the runtime image
+RUN npm prune --omit=dev
 
-# Start the application
-CMD ["npm", "start"]
+# Render sets PORT; make sure your app reads process.env.PORT
+EXPOSE 5000
+CMD ["npm","start"]
